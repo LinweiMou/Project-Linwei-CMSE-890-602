@@ -1,0 +1,75 @@
+function download_extract_save(journal_paper)
+	paper = download(journal_paper)
+	information = extract(paper)
+	dimension = information[0]
+	boundary_condition = information[1]
+	time_range = information[2]
+	temperature_profile = information[3]
+	information_file = write(dimension + boundary_condition + time_range + temperature_profile, file_name)
+	return information_file
+
+function construct_object(information_file)
+        dimensions = read(information_file)[0]
+        object = construct(dimensions)
+        return object
+        
+function mesh_structure(object)
+        meshtype = triangles or squares
+        mesh = apply(meshtype, object)
+        return mesh
+        
+function set_boundary(mesh)
+        boundary = locate_entities(mesh)
+        boundary_condition = boundary_condition_types(boundary)    
+        return boundary_condition
+        
+function algorithm(mesh, boundary_condition)    
+        simulation_result = apply_algorithm(mesh)
+        boundary_result = get_boundary_result_from(mesh)
+        boundary_condition = update(boundary_result)
+        return simulation_result
+        
+function time_range(information_file)  
+        time_step = read(information_file)[2] 
+        return time_step
+        
+function plot_data(simulation_result)
+	plot = plot_the_data(simulation_result)
+	return plot
+        
+function save_plot(file_name, plot)
+	output = write(plot, file_name)
+	return output
+	
+function compare(file1, file2)
+        plot1 = read(file1)[3]
+        plot2 = read(file2)
+        compare_result = compare(plot1, plot2)
+        return compare_result
+        
+function save_data(file_name, simulation_result)
+	output = write(simulation_result, file_name)
+	return output
+        
+original_information = download_extract_save(journal_paper)
+object = construct_object(original_information)
+mesh = mesh_structure(object)
+boundary_condition = set_boundary(mesh)
+
+t = 0
+timestep = time_range(original_information) / n
+
+while t <= time_range(original_information)
+    
+    t += timestep
+    simulation_result = algorithm(mesh, boundary_condition)
+    
+simulation_plot = plot_data(simulation_result)
+save_plot(simulation_file, simulation_plot)
+compare_result = compare(original_information, simulation_file)
+print(compare_result)
+
+if compare_result == True:
+    output = save_data(file_name, simulation_result)
+
+       
