@@ -23,6 +23,8 @@ timestep = 1e-9
 meshsize = 1e-4    
 conductiontime = 1e-6
 t = 0
+t_cache = 0
+storagetime = 10
 
 L = 0.025
 H = 0.005
@@ -85,3 +87,75 @@ dt = fem.Constant(msh, default_scalar_type(timestep))
 
 a =  inner(T, v) * dx + dt * alpha * inner(grad(T), grad(v)) * dx 
 L = inner(T_1, v) * dx
+
+
+bilinear_form = fem.form(a)
+linear_form = fem.form(L)
+A = fem.petsc.create_matrix(bilinear_form)
+b = fem.petsc.create_vector(linear_form)
+
+solver = PETSc.KSP().create(msh.comm)
+solver.setOperators(A)
+solver.setType(PETSc.KSP.Type.GMRES)
+solver.getPC().setType(PETSc.PC.Type.JACOBI)
+solver.setTolerances(rtol=1e-9)
+solver.setTolerances(atol=1e-13)
+solver.setTolerances(max_it=1000)
+
+
+while (t<conductiontime):
+    
+    t += timestep
+
+    A.zeroEntries()
+    fem.petsc.assemble_matrix(A, bilinear_form, bcs=bcs)
+    A.assemble()
+    with b.localForm() as loc_b:
+        loc_b.set(0)
+    fem.petsc.assemble_vector(b, linear_form)
+    fem.petsc.apply_lifting(b, [bilinear_form], [bcs])
+    b.ghostUpdate(addv=PETSc.InsertMode.ADD_VALUES, mode=PETSc.ScatterMode.REVERSE)
+    fem.petsc.set_bc(b, bcs)
+
+    solver.solve(b, Th.vector)
+    Th.x.scatter_forward()
+
+    T_1.x.array[:] = Th.x.array
+    T_1.x.scatter_forward()    
+    
+    
+    if round(t, 3) % storagetime == 0 and round(t, 3) - t_cache > 5*timestep:
+        
+        t_cache = round(t, 3)
+        Th_cache = Th
+
+        if rank == 0:
+                
+            alldata_out = {'Th': Th_cache}
+            alldata_out = pd.DataFrame.from_dict(alldata_out, orient='index')
+            alldata_out = alldata_out.transpose()
+            data_write_path = r"temp@" + str(round(t)) + "s.csv"      
+            alldata_out.to_csv(data_write_path, index=False, mode='w') 
+
+
+topo, types, geom = plot.vtk_mesh(V)
+grid = pyvista.UnstructuredGrid(topo, types, geom)
+grid.point_data["temperature"] = Th.x.array.real
+grid.set_active_scalars("temperature")
+plotter = pyvista.Plotter()
+plotter.add_text("temperature", position="upper_edge", font_size=14, color="black")
+plotter.add_mesh(grid, show_edges=False)
+plotter.view_xy()
+plotter.show()
+
+
+
+
+
+
+
+
+
+
+
+
