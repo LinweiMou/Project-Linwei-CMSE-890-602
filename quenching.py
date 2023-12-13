@@ -1,15 +1,12 @@
 import gmsh
 import numpy as np
 from mpi4py import MPI
-
 import ufl
 from ufl import ds, dx, grad, inner, VectorElement, FacetNormal, SpatialCoordinate, TrialFunction, TestFunction, Measure
 import time
 from dolfinx import mesh, fem, io, plot, default_scalar_type
 from dolfinx.fem.petsc import assemble_matrix, assemble_vector, apply_lifting, create_vector, set_bc
-
 import pyvista
-
 from petsc4py import PETSc
 
 teststart = time.perf_counter()
@@ -20,8 +17,8 @@ rank = MPI.COMM_WORLD.rank
 comm = MPI.COMM_WORLD
 
 timestep = 1e-9
-meshsize = 1e-4    
-conductiontime = 1e-6
+meshsize = 2e-4    
+conductiontime = 1e-7
 t = 0
 t_cache = 0
 storagetime = 10
