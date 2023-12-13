@@ -1,0 +1,7 @@
+#all the needed information to do the numerical simualtion
+
+dimension = [[L, 0.025], [H, 0.005], [meshsize, 2e-4], [gdim, 2]]
+boundary_condition = [[top, insulation], [right, insulation], [left, constant], [bottom, constant]]
+initial_condition = 680
+time_range = [[dt, 1e-9], [conduction, 1e-7]]
+properties = [[alpha, 0.158], [water, 300]]
