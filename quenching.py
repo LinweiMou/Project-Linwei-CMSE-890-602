@@ -13,7 +13,7 @@ teststart = time.perf_counter()
 print("start the simulation")
 
 
-# Create mesh and define function space
+# set the parameters for parallel computing
 rank = MPI.COMM_WORLD.rank
 comm = MPI.COMM_WORLD
 
@@ -63,7 +63,6 @@ def read_paper_information(file_path):
 
     return data
 
-
 # access the information using the keys
 # print("Dimension:", paper_data['dimension'])
 # print("Boundary Condition:", paper_data['boundary_condition'])
@@ -71,173 +70,281 @@ def read_paper_information(file_path):
 # print("Time Range:", paper_data['time_range'])
 # print("Properties:", paper_data['properties'])
 
+
 def generate_mesh(dimension_info, output_file="quenching_mesh.msh"):
     """
     Generates a mesh using Gmsh based on the provided dimension information.
 
     Parameters:
     - dimension_info (list): List containing dimension information [L, H, meshsize, gdim].
-    - output_file (str): Name of the output mesh file (default is "quenching.msh").
+    - output_file (str): Name of the output mesh file (default is "quenching_mesh.msh").
     """
+    # Initialize Gmsh
     gmsh.initialize()
 
+    # Check if the rank is 0 (assuming MPI-like parallelization)
     if rank == 0:
+        # Extract dimension information from the input list
         L, H, meshsize, gdim = dimension_info[1], dimension_info[3], dimension_info[5], int(dimension_info[7])
 
+        # Add a rectangle to the Gmsh model
         rect = gmsh.model.occ.addRectangle(0, 0, 0, L, H)
+        
+        # Synchronize the model
         gmsh.model.occ.synchronize()
+
+        # Add a physical group for the specified dimension
         gmsh.model.addPhysicalGroup(gdim, [rect], 1)
 
+        # Set meshing options
         gmsh.option.setNumber("Mesh.CharacteristicLengthMin", meshsize)
         gmsh.option.setNumber("Mesh.CharacteristicLengthMax", meshsize)
         gmsh.option.setNumber("Mesh.Algorithm", 5)
-        gmsh.model.mesh.generate(gdim)
-        gmsh.model.mesh.setOrder(1)
-        gmsh.model.mesh.optimize("Netgen")
-        gmsh.write(output_file)  # output the mesh configuration
 
+        # Generate the mesh
+        gmsh.model.mesh.generate(gdim)
+        
+        # Set the order of the mesh elements
+        gmsh.model.mesh.setOrder(1)
+
+        # Optimize the mesh using Netgen
+        gmsh.model.mesh.optimize("Netgen")
+
+        # Write the mesh configuration to the specified output file
+        gmsh.write(output_file)
+
+    # Finalize Gmsh
     gmsh.finalize()
     
 
+def create_function_space_and_fields(mesh):
+    """
+    Create a function space and fields for the finite element method.
+
+    Parameters:
+    - mesh (Mesh): The mesh for the finite element method.
+
+    Returns:
+    - V (FunctionSpace): The function space.
+    - x (SpatialCoordinate): The spatial coordinate.
+    - T (TrialFunction): The trial function.
+    - v (TestFunction): The test function.
+    - T_1 (Function): The function T_1.
+    - Th (Function): The function Th.
+    """
+
+    # Create a function space
+    V = fem.FunctionSpace(mesh, ("Lagrange", 1))
+
+    # Define spatial coordinates
+    x = SpatialCoordinate(msh)
+
+    # Define trial and test functions
+    T = TrialFunction(V)
+    v = TestFunction(V)
+
+    # Initialize functions
+    T_1 = fem.Function(V)
+    Th = fem.Function(V)
+
+    # Interpolate initial condition for T_1
+    T_1.interpolate(lambda x: 680.0 + 0 * x[0])
+
+    return V, x, T, v, T_1, Th
 
 
+def temp_bc(x):
+    """
+    Define a boolean function to represent a temperature boundary condition.
 
+    Parameters:
+    - x (numpy.ndarray): A numpy array representing the spatial coordinates [x, y].
+
+    Returns:
+    - bc_mask (numpy.ndarray): A boolean array indicating whether the point is on the boundary.
+    """
+    # Check if x[0] is close to 0 or x[1] is close to 0 (left and bottom)
+    bc_mask = np.logical_or(np.isclose(x[0], 0), np.isclose(x[1], 0))
+
+    return bc_mask
+
+
+def apply_temp_boundary_condition(V, temp_bc):
+    """
+    Apply a temperature boundary condition to a given function space.
+
+    Parameters:
+    - V (FunctionSpace): The function space for the finite element method.
+    - temp_bc (callable): A function that determines the points on the boundary.
+
+    Returns:
+    - temp_boundary (Function): The function representing the applied temperature boundary condition.
+    - bcs (list): A list of DirichletBC objects specifying the boundary conditions.
+    """
+    # Locate degrees of freedom on the boundary defined by temp_bc
+    dofs_crack = fem.locate_dofs_geometrical(V, temp_bc)
+
+    # Create a function representing the temperature boundary condition
+    temp_boundary = fem.Function(V)
+    temp_boundary.interpolate(lambda x: 300.0 + 0 * x[0])
+
+    # Scatter the values to apply the boundary condition
+    temp_boundary.x.scatter_forward()
+
+    # Create a Dirichlet boundary condition using the located degrees of freedom
+    bcs = [fem.dirichletbc(temp_boundary, dofs_crack)]
+
+    return temp_boundary, bcs
+    
+    
+def create_solver(bilinear_form, linear_form, mesh_comm):
+    """
+    Create and configure a PETSc KSP solver for a given bilinear and linear form.
+
+    Parameters:
+    - bilinear_form (a bilinear form): The bilinear form of the variational problem.
+    - linear_form (a linear form): The linear form of the variational problem.
+    - mesh_comm (MPI communicator): The MPI communicator associated with the mesh.
+
+    Returns:
+    - solver (PETSc.KSP): The configured PETSc KSP solver.
+    - A (PETSc.Mat): The PETSc matrix corresponding to the bilinear form.
+    - b (PETSc.Vec): The PETSc vector corresponding to the linear form.
+    """
+    # Create PETSc matrix and vector for the bilinear and linear forms
+    A = fem.petsc.create_matrix(bilinear_form)
+    b = fem.petsc.create_vector(linear_form)
+
+    # Create PETSc KSP solver
+    solver = PETSc.KSP().create(mesh_comm)
+    solver.setOperators(A)
+
+    # Configure the solver
+    solver.setType(PETSc.KSP.Type.GMRES)
+    solver.getPC().setType(PETSc.PC.Type.JACOBI)
+    solver.setTolerances(rtol=1e-9, atol=1e-13, max_it=1000)
+
+    return solver, A, b
+
+
+def solve_linear_system(A, b, bilinear_form, linear_form, bcs):
+    """
+    Solve a linear system using a PETSc KSP solver.
+
+    Parameters:
+    - A (PETSc.Mat): PETSc matrix corresponding to the bilinear form.
+    - b (PETSc.Vec): PETSc vector corresponding to the linear form.
+    - bilinear_form (a bilinear form): The bilinear form of the variational problem.
+    - linear_form (a linear form): The linear form of the variational problem.
+    - bcs (list): A list of DirichletBC objects specifying the boundary conditions.
+
+    Returns:
+    - Th (Function): The solution function.
+    """
+    # Zero out the matrix entries
+    A.zeroEntries()
+
+    # Assemble the matrix and apply boundary conditions
+    fem.petsc.assemble_matrix(A, bilinear_form, bcs=bcs)
+    A.assemble()
+
+    # Zero out the local vector
+    with b.localForm() as loc_b:
+        loc_b.set(0)
+
+    # Assemble the vector and apply boundary conditions
+    fem.petsc.assemble_vector(b, linear_form)
+    fem.petsc.apply_lifting(b, [bilinear_form], [bcs])
+
+    # Update the ghost values in the vector
+    b.ghostUpdate(addv=PETSc.InsertMode.ADD_VALUES, mode=PETSc.ScatterMode.REVERSE)
+
+    # Apply boundary conditions to the vector
+    fem.petsc.set_bc(b, bcs)
+
+   
+
+    # Solve the linear system
+    solver.solve(b, Th.vector)
+
+    # Update the ghost values in the solution vector
+    Th.x.scatter_forward()
+    
+    # Update the values to next timestep and the ghost values
+    T_1.x.array[:] = Th.x.array
+    T_1.x.scatter_forward() 
+
+    return Th
+    
+
+def save_solution_plot(V, Th, output_file="solution_plot.png"):
+    """
+    Save a temperature distribution plot to a file.
+
+    Parameters:
+    - V (FunctionSpace): The function space.
+    - Th (Function): The solution function.
+    - output_file (str): Name of the output file (default is "solution_plot.png").
+    """
+    topo, types, geom = plot.vtk_mesh(V)
+    grid = pyvista.UnstructuredGrid(topo, types, geom)
+    grid.point_data["temperature"] = Th.x.array.real
+    plotter = pyvista.Plotter(off_screen=True)
+    plotter.add_text("Temperature Distribution", position="upper_edge", font_size=14, color="black")
+    plotter.add_mesh(grid, show_edges=False)
+    plotter.view_xy()
+
+    # Save the plot to a file
+    plotter.show(screenshot=output_file)
+
+
+# the main script starts here
 
 # read data from paper information
 file_path = "paper_information.txt"
 paper_data = read_paper_information(file_path)
 
+# generate the quenching mesh
 dimension_info = paper_data['dimension']
 generate_mesh(dimension_info)
 
-timestep = 1e-9
-meshsize = 2e-4    
-conductiontime = 1e-7
-t = 0
-t_cache = 0
-storagetime = 10
-
-L = 0.025
-H = 0.005
-gdim = 2
-
-# generate the mesh configuration with Delaunay triangles
-
-gmsh.initialize()
-
-if rank == 0:
-
-    rect = gmsh.model.occ.addRectangle(0, 0, 0, L, H) 
-    gmsh.model.occ.synchronize()
-    gmsh.model.addPhysicalGroup(gdim, [rect], 1)
-    
-    gmsh.option.setNumber("Mesh.CharacteristicLengthMin", meshsize)
-    gmsh.option.setNumber("Mesh.CharacteristicLengthMax", meshsize)
-    gmsh.option.setNumber("Mesh.Algorithm", 5)
-    gmsh.model.mesh.generate(gdim)
-    gmsh.model.mesh.setOrder(1)
-    gmsh.model.mesh.optimize("Netgen")  
-    gmsh.write("quenching.msh")   # output the mesh configuration
-    
-gmsh.finalize() 
-
-# read the mesh configuration from the source file
-
+# read the mesh configuration from the generated mesh
 gmsh_model_rank = 0
-mesh_comm = MPI.COMM_WORLD
-msh, cell_markers, facet_markers = io.gmshio.read_from_msh("quenching.msh", mesh_comm, gmsh_model_rank, gdim=gdim)
+msh, cell_markers, facet_markers = io.gmshio.read_from_msh("quenching_mesh.msh", comm, gmsh_model_rank, gdim=2)
 
-# set functions for the FEM variational equation
+# generate function space and fields
+V, x, T, v, T_1, Th = create_function_space_and_fields(msh)
 
-V = fem.FunctionSpace(msh, ("Lagrange", 1))
-x = SpatialCoordinate(msh)
-T = TrialFunction(V)
-v = TestFunction(V)
-T_1 = fem.Function(V)
-Th = fem.Function(V)
+# apply boundary conditions
+temp_boundary, bcs = apply_temp_boundary_condition(V, temp_bc)
 
-# set thermal diffusivity and initial conditions
-
-alpha = 300 / 2450 / 0.775
-T_1.interpolate(lambda x: 680.0 + 0 * x[0])
-
-# set boundary conditions (Dirichelet and Neumann)
-
-def temp_bc(x):
-    return np.logical_or(np.isclose(x[0], 0), np.isclose(x[1], 0))
-
-dofs_crack = fem.locate_dofs_geometrical(V, temp_bc)
-temp_boundary = fem.Function(V)
-temp_boundary.interpolate(lambda x: 300.0 + 0 * x[0])
-temp_boundary.x.scatter_forward()
-bcs = [fem.dirichletbc(temp_boundary, dofs_crack)]
-
+# set time step and time range
+timestep, conductiontime = paper_data['time_range'][1], paper_data['time_range'][3]
 dt = fem.Constant(msh, default_scalar_type(timestep))
+t = 0
 
-# set FEM variational equation
+# set parameters
+alpha = paper_data['properties'][1]
 
+# set FEM variational equation and corresponding solver
 a =  inner(T, v) * dx + dt * alpha * inner(grad(T), grad(v)) * dx 
 L = inner(T_1, v) * dx
-
-
 bilinear_form = fem.form(a)
 linear_form = fem.form(L)
-A = fem.petsc.create_matrix(bilinear_form)
-b = fem.petsc.create_vector(linear_form)
-
-solver = PETSc.KSP().create(msh.comm)
-solver.setOperators(A)
-solver.setType(PETSc.KSP.Type.GMRES)
-solver.getPC().setType(PETSc.PC.Type.JACOBI)
-solver.setTolerances(rtol=1e-9)
-solver.setTolerances(atol=1e-13)
-solver.setTolerances(max_it=1000)
+solver, A, b = create_solver(bilinear_form, linear_form, msh.comm)
 
 
 while (t<conductiontime):
     
     t += timestep
 
-    A.zeroEntries()
-    fem.petsc.assemble_matrix(A, bilinear_form, bcs=bcs)
-    A.assemble()
-    with b.localForm() as loc_b:
-        loc_b.set(0)
-    fem.petsc.assemble_vector(b, linear_form)
-    fem.petsc.apply_lifting(b, [bilinear_form], [bcs])
-    b.ghostUpdate(addv=PETSc.InsertMode.ADD_VALUES, mode=PETSc.ScatterMode.REVERSE)
-    fem.petsc.set_bc(b, bcs)
-
-    solver.solve(b, Th.vector)
-    Th.x.scatter_forward()
-
-    T_1.x.array[:] = Th.x.array
-    T_1.x.scatter_forward()    
+    Th = solve_linear_system(A, b, bilinear_form, linear_form, bcs)
+    
+    if rank == 0:
+        print("time step:", round(t, 9))    
     
     
-    if round(t, 3) % storagetime == 0 and round(t, 3) - t_cache > 5*timestep:
-        
-        t_cache = round(t, 3)
-        Th_cache = Th
-
-        if rank == 0:
-                
-            alldata_out = {'Th': Th_cache}
-            alldata_out = pd.DataFrame.from_dict(alldata_out, orient='index')
-            alldata_out = alldata_out.transpose()
-            data_write_path = r"temp@" + str(round(t)) + "s.csv"      
-            alldata_out.to_csv(data_write_path, index=False, mode='w') 
-
-
-topo, types, geom = plot.vtk_mesh(V)
-grid = pyvista.UnstructuredGrid(topo, types, geom)
-grid.point_data["temperature"] = Th.x.array.real
-grid.set_active_scalars("temperature")
-plotter = pyvista.Plotter()
-plotter.add_text("temperature", position="upper_edge", font_size=14, color="black")
-plotter.add_mesh(grid, show_edges=False)
-plotter.view_xy()
-plotter.show()
+save_solution_plot(V, Th, output_file="my_result.png")
 
 
 
