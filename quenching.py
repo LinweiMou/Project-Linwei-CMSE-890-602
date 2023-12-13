@@ -63,10 +63,6 @@ def read_paper_information(file_path):
 
     return data
 
-# read data from paper information
-file_path = "paper_information.txt"
-paper_data = read_paper_information(file_path)
-
 
 # access the information using the keys
 # print("Dimension:", paper_data['dimension'])
@@ -75,6 +71,44 @@ paper_data = read_paper_information(file_path)
 # print("Time Range:", paper_data['time_range'])
 # print("Properties:", paper_data['properties'])
 
+def generate_mesh(dimension_info, output_file="quenching_mesh.msh"):
+    """
+    Generates a mesh using Gmsh based on the provided dimension information.
+
+    Parameters:
+    - dimension_info (list): List containing dimension information [L, H, meshsize, gdim].
+    - output_file (str): Name of the output mesh file (default is "quenching.msh").
+    """
+    gmsh.initialize()
+
+    if rank == 0:
+        L, H, meshsize, gdim = dimension_info[1], dimension_info[3], dimension_info[5], int(dimension_info[7])
+
+        rect = gmsh.model.occ.addRectangle(0, 0, 0, L, H)
+        gmsh.model.occ.synchronize()
+        gmsh.model.addPhysicalGroup(gdim, [rect], 1)
+
+        gmsh.option.setNumber("Mesh.CharacteristicLengthMin", meshsize)
+        gmsh.option.setNumber("Mesh.CharacteristicLengthMax", meshsize)
+        gmsh.option.setNumber("Mesh.Algorithm", 5)
+        gmsh.model.mesh.generate(gdim)
+        gmsh.model.mesh.setOrder(1)
+        gmsh.model.mesh.optimize("Netgen")
+        gmsh.write(output_file)  # output the mesh configuration
+
+    gmsh.finalize()
+    
+
+
+
+
+
+# read data from paper information
+file_path = "paper_information.txt"
+paper_data = read_paper_information(file_path)
+
+dimension_info = paper_data['dimension']
+generate_mesh(dimension_info)
 
 timestep = 1e-9
 meshsize = 2e-4    
