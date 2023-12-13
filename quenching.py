@@ -12,9 +12,69 @@ from petsc4py import PETSc
 teststart = time.perf_counter()
 print("start the simulation")
 
+
 # Create mesh and define function space
 rank = MPI.COMM_WORLD.rank
 comm = MPI.COMM_WORLD
+
+
+def read_paper_information(file_path):
+    """
+    Reads information from a text file and extracts key-value pairs.
+
+    Parameters:
+    - file_path (str): The path to the text file containing information.
+
+    Returns:
+    - data (dict): A dictionary containing the extracted key-value pairs.
+    """
+    with open(file_path, 'r') as file:
+        lines = file.readlines()
+
+    # Initialize an empty dictionary to store key-value pairs
+    data = {}
+
+    # Loop through each line in the file
+    for line in lines:
+        # Strip leading and trailing whitespaces from the line
+        line = line.strip()
+
+        # Skip lines starting with '#' (comments) or empty lines
+        if line.startswith('#') or not line:
+            continue
+
+        # Split the line into key and value based on '='
+        key, value_str = [item.strip() for item in line.split('=')]
+        key = key.strip()
+
+        # Check if the value is a list or a single value
+        if '[' in value_str and ']' in value_str:
+            # Parse the list
+            value = [item.strip(" []") for item in value_str.split(',')]
+            # Convert numeric values to float, excluding non-numeric values
+            value = [float(item) if (item.replace('.', '', 1).isdigit() or 'e' in item.lower()) and not item.isalpha() else item for item in value]
+        else:
+            # Parse the single value
+            # Convert numeric values to float, excluding non-numeric values
+            value = float(value_str) if (value_str.replace('.', '', 1).isdigit() or 'e' in value_str.lower()) and not value_str.isalpha() else value_str
+
+        # Store the key-value pair in the dictionary
+        data[key] = value
+
+    return data
+
+# read data from paper information
+file_path = "paper_information.txt"
+paper_data = read_paper_information(file_path)
+
+
+# access the information using the keys
+# print("Dimension:", paper_data['dimension'])
+# print("Boundary Condition:", paper_data['boundary_condition'])
+# print("Initial Condition:", paper_data['initial_condition'])
+# print("Time Range:", paper_data['time_range'])
+# print("Properties:", paper_data['properties'])
+
 
 timestep = 1e-9
 meshsize = 2e-4    
