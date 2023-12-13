@@ -1,0 +1,6 @@
+# Sample data file
+dimension = 2
+boundary_condition = [DirichletBC, NeumannBC]
+initial_condition = InitialCondition
+time_range = [0.0, 1.0]
+properties = [0.25, 0.35]
