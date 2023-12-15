@@ -88,11 +88,11 @@ def save_paper_information(paper_data):
     """
     
     # File paths for different aspects of paper information
-    file1 = "dimension.txt"
-    file2 = "boundary_condition.txt"
-    file3 = "initial_condition.txt"
-    file4 = "time_range.txt"
-    file5 = "properties.txt"
+    file1 = "./results/dimension.txt"
+    file2 = "./results/boundary_condition.txt"
+    file3 = "./results/initial_condition.txt"
+    file4 = "./results/time_range.txt"
+    file5 = "./results/properties.txt"
 
     # Save dimensions to 'dimension.txt'
     with open(file1, 'w') as file:
@@ -325,7 +325,7 @@ def solve_linear_system(A, b, bilinear_form, linear_form, bcs):
     return Th
     
 
-def save_solution_plot(V, Th, output_file="solution_plot.png"):
+def save_solution_plot(V, Th, output_file="./results/solution_plot.png"):
     """
     Save a temperature distribution plot to a file.
 
@@ -393,7 +393,7 @@ while (t<conductiontime):
         print("time step:", round(t, 9))    
     
     
-save_solution_plot(V, Th, output_file="my_result.png")
+save_solution_plot(V, Th, output_file="./results/my_result.png")
 
 
 

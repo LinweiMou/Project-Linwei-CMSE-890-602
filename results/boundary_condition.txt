@@ -1,0 +1,1 @@
+['top', 'insulation', 'right', 'insulation', 'left', 'constant', 'bottom', 'constant']
