@@ -71,6 +71,56 @@ def read_paper_information(file_path):
 # print("Properties:", paper_data['properties'])
 
 
+def save_paper_information(paper_data):
+    """
+    Save paper information to multiple text files.
+
+    Parameters:
+    - paper_data (dict): A dictionary containing paper information.
+
+    The function saves different aspects of the paper information to separate text files.
+    The keys in the 'paper_data' dictionary correspond to different aspects of the paper.
+
+    File 1: 'dimension.txt' - Dimensions of the paper.
+    File 2: 'boundary_condition.txt' - Boundary conditions of the paper.
+    File 3: 'initial_condition.txt' - Initial conditions of the paper.
+    File 4: 'time_range.txt' - Time range of the paper.
+    File 5: 'properties.txt' - Properties of the paper.
+    """
+    
+    # File paths for different aspects of paper information
+    file1 = "dimension.txt"
+    file2 = "boundary_condition.txt"
+    file3 = "initial_condition.txt"
+    file4 = "time_range.txt"
+    file5 = "properties.txt"
+
+    # Save dimensions to 'dimension.txt'
+    with open(file1, 'w') as file:
+        # Append data to the file
+        file.write(str(paper_data['dimension']))
+
+    # Save boundary conditions to 'boundary_condition.txt'
+    with open(file2, 'w') as file:
+        # Append data to the file
+        file.write(str(paper_data['boundary_condition']))
+
+    # Save initial conditions to 'initial_condition.txt'
+    with open(file3, 'w') as file:
+        # Append data to the file
+        file.write(str(paper_data['initial_condition']))
+
+    # Save time range to 'time_range.txt'
+    with open(file4, 'w') as file:
+        # Append data to the file
+        file.write(str(paper_data['time_range']))
+
+    # Save properties to 'properties.txt'
+    with open(file5, 'w') as file:
+        # Append data to the file
+        file.write(str(paper_data['properties']))
+
+
 def generate_mesh(dimension_info, output_file="quenching_mesh.msh"):
     """
     Generates a mesh using Gmsh based on the provided dimension information.
@@ -326,6 +376,35 @@ def test_read_paper_information(tmp_path):
         'time_range': [0.0, 1.0],
         'properties': [0.25, 0.35]
     }
+    
+
+@pytest.fixture
+def sample_paper_information():
+    """
+    Fixture to provide a sample paper information dictionary for testing.
+    """
+    return {
+        'dimension': 'A4',
+        'boundary_condition': 'Open',
+        'initial_condition': 'Steady-state',
+        'time_range': '2022-2023',
+        'properties': 'High-quality'
+    }
+
+def test_save_paper_information(sample_paper_information):
+    """
+    Test the save_paper_information function.
+    """
+    # Call the function to save paper information to files
+    save_paper_information(sample_paper_information)
+
+    # Check if files are created and contain the expected content
+    assert open("dimension.txt").read().strip() == "A4"
+    assert open("boundary_condition.txt").read().strip() == "Open"
+    assert open("initial_condition.txt").read().strip() == "Steady-state"
+    assert open("time_range.txt").read().strip() == "2022-2023"
+    assert open("properties.txt").read().strip() == "High-quality"
+    
 
 def test_generate_mesh(tmp_path, dimension_info):
     output_file = tmp_path / "test_mesh.msh"

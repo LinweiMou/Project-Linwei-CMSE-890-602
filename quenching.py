@@ -70,6 +70,54 @@ def read_paper_information(file_path):
 # print("Time Range:", paper_data['time_range'])
 # print("Properties:", paper_data['properties'])
 
+def save_paper_information(paper_data):
+    """
+    Save paper information to multiple text files.
+
+    Parameters:
+    - paper_data (dict): A dictionary containing paper information.
+
+    The function saves different aspects of the paper information to separate text files.
+    The keys in the 'paper_data' dictionary correspond to different aspects of the paper.
+
+    File 1: 'dimension.txt' - Dimensions of the paper.
+    File 2: 'boundary_condition.txt' - Boundary conditions of the paper.
+    File 3: 'initial_condition.txt' - Initial conditions of the paper.
+    File 4: 'time_range.txt' - Time range of the paper.
+    File 5: 'properties.txt' - Properties of the paper.
+    """
+    
+    # File paths for different aspects of paper information
+    file1 = "dimension.txt"
+    file2 = "boundary_condition.txt"
+    file3 = "initial_condition.txt"
+    file4 = "time_range.txt"
+    file5 = "properties.txt"
+
+    # Save dimensions to 'dimension.txt'
+    with open(file1, 'w') as file:
+        # Append data to the file
+        file.write(str(paper_data['dimension']))
+
+    # Save boundary conditions to 'boundary_condition.txt'
+    with open(file2, 'w') as file:
+        # Append data to the file
+        file.write(str(paper_data['boundary_condition']))
+
+    # Save initial conditions to 'initial_condition.txt'
+    with open(file3, 'w') as file:
+        # Append data to the file
+        file.write(str(paper_data['initial_condition']))
+
+    # Save time range to 'time_range.txt'
+    with open(file4, 'w') as file:
+        # Append data to the file
+        file.write(str(paper_data['time_range']))
+
+    # Save properties to 'properties.txt'
+    with open(file5, 'w') as file:
+        # Append data to the file
+        file.write(str(paper_data['properties']))
 
 def generate_mesh(dimension_info, output_file="quenching_mesh.msh"):
     """
@@ -303,6 +351,7 @@ def save_solution_plot(V, Th, output_file="solution_plot.png"):
 # read data from paper information
 file_path = "paper_information.txt"
 paper_data = read_paper_information(file_path)
+save_paper_information(paper_data)
 
 # generate the quenching mesh
 dimension_info = paper_data['dimension']
